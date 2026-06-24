@@ -1,5 +1,7 @@
 # The Idea
 
+I AM STILL WAITING FOR GGG TO ANSWER MY EMAIL FOR API ACCESS
+
 Statistical Arbitrage and Volatility Trading in Path of Exile 2
 
 Pull PoE2 API data (every 60 mins) -> 
