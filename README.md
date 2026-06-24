@@ -1,4 +1,7 @@
 # The Idea
+
+Arbitrage Volatility Trading on Path of Exile 2
+
 Pull PoE2 API data (every 60 mins) -> 
 
 Do analysis on promising currencies (Math™) -> 
