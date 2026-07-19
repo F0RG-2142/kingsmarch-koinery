@@ -1,7 +1,7 @@
 # PoE2 Stat-Arb & Volatility Trading
 *Statistical Arbitrage and Volatility Trading in Path of Exile 2*
 
-**UPDATE:** Decided to use the [poe2scout API](https://poe2scout.com/api/swagger#/{Realm}/Leagues/{LeagueName}/Currencies/Pairs/{CurrencyOneItemId}/{CurrencyTwoItemId}/History) to trade on pairs based on the 3 primary bases: Chaos, Exalted, and Divine.
+**UPDATE:** Decided to use the [poe2scout API](https://poe2scout.com/api/swagger#/poe2/Leagues/{LeagueName}/Currencies/Pairs/{CurrencyOneItemId}/{CurrencyTwoItemId}/History) to trade on pairs based on the 3 primary bases: Chaos, Exalted, and Divine.
 
 ---
 
@@ -113,3 +113,9 @@ $$
 
 ### Disclaimer
 *This model does not yet incorporate in-game Gold fees (YET).*
+
+Chaos Orb: 160 Gold (Item ID: chaos)
+
+Exalted Orb: 120 Gold (Item ID: exalted)
+
+Divine Orb: 800 (Item ID: divine)
