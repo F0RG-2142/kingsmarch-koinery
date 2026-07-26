@@ -6,6 +6,8 @@
 Using currency by category to page over currency prices for the past month now.
 
 There is also only per-day data so we cant make per-hour trades like I hoped. It will have to send out after each day completes for the most up-to-date data.
+ 
+Only have daily volume endpoints, BUT the "current price" and "current volume" fields get updated every hour, so I will have to shift from a stateless design to a stateful implementation saving api calls every hour.
 
 `OBI Discontinued`
 
