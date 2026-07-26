@@ -1,7 +1,13 @@
 # PoE2 Stat-Arb & Volatility Trading
 *Statistical Arbitrage and Volatility Trading in Path of Exile 2*
 
-**UPDATE:** Decided to use the [poe2scout API](https://poe2scout.com/api/swagger#/poe2/Leagues/{LeagueName}/Currencies/Pairs/{CurrencyOneItemId}/{CurrencyTwoItemId}/History) to trade on pairs based on the 3 primary bases: Chaos, Exalted, and Divine.
+**UPDATE:** Decided to use the [poe2scout API](https://api.poe2scout.com/swagger/index.html)
+
+Using currency by category to page over currency prices for the past month now.
+
+There is also only per-day data so we cant make per-hour trades like I hoped. It will have to send out after each day completes for the most up-to-date data.
+
+`OBI Discontinued`
 
 ---
 
@@ -54,22 +60,6 @@ If we just blindly follow the bands, we're naive (volatility isn't the only vari
 * If the market is heavily weighted with **buyers** (closer to 1), we shift our entire volatility bracket upward based on the ratio. *(We keep our buy relatively low to avoid paying the hype premium).*
 * If the market is heavily weighted with **sellers** (closer to -1), we shift our entire volatility bracket downward to scoop up that cheap currency.
 
-**Order Book Imbalance (OBI):**
-
-$$
-OBI = \frac{V_b - V_s}{V_b + V_s}
-$$
-
-*(Where `V_b` is the total volume of active buy orders and `V_s` is the total volume of active sell orders.)*
-
-**The Skew Adjustment:**
-
-$$
-Skew = OBI \times 1.5
-$$
-
-*(Where 1.5 is a tuning constant.)*
-
 > ***"But, like, what if something just keeps spiraling into oblivion?"***
 > 
 > We just keep a max position size? Duh?
@@ -94,20 +84,6 @@ $$
 ## The Final Formula
 
 Bringing it all together, our dynamic target limits look like this:
-
-**Target Buy:**
-
-$$
-Buy_{final} = \mu_{vw} - 2.5\sigma_{vw} + (OBI \times 1.5\sigma_{vw})
-$$
-
-**Target Sell:**
-
-$$
-Sell_{final} = \mu_{vw} + 1.5\sigma_{vw} + (OBI \times 1.5\sigma_{vw}) + Premium_{bulk}
-$$
-
----
 
 ### Disclaimer
 *This model does not yet incorporate in-game Gold fees (YET).*
