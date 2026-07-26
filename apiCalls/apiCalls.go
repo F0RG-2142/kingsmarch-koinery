@@ -21,10 +21,10 @@ type PriceLogs struct {
 }
 
 type currencyItems struct {
-	UniqueItemId    int         `json:"UniqueItemId"`
-	ItemId          int         `json:"ItemId"`
-	Name            string      `json:"Name"`
-	Type            string      `json:"Type"`
+	UniqueItemId int    `json:"UniqueItemId"`
+	ItemId       int    `json:"ItemId"`
+	Name         string `json:"ApiId"`
+	//ItemMetadata    string      `json:"ItemMetadata"`
 	PriceLogs       []PriceLogs `json:"PriceLogs"`
 	CurrentPrice    float32     `json:"CurrentPrice"`
 	CurrentQuantity int32       `json:"CurrentQuantity"`
@@ -66,8 +66,6 @@ func CallApi(client *http.Client, leagueName string, pageNumber int32) ([]curren
 	} else {
 		fmt.Println("The request succeeded, but the items array is empty.")
 	}
-
-	fmt.Println(respStruct.Items[0])
 
 	return respStruct.Items, nil
 }
