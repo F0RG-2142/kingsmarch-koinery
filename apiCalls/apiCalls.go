@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 var baseUrl = "https://api.poe2scout.com/poe2/Leagues"
@@ -21,10 +22,9 @@ type PriceLogs struct {
 }
 
 type currencyItems struct {
-	UniqueItemId int    `json:"UniqueItemId"`
-	ItemId       int    `json:"ItemId"`
-	Name         string `json:"ApiId"`
-	//ItemMetadata    string      `json:"ItemMetadata"`
+	UniqueItemId    int         `json:"UniqueItemId"`
+	ItemId          int         `json:"ItemId"`
+	Name            string      `json:"ApiId"`
 	PriceLogs       []PriceLogs `json:"PriceLogs"`
 	CurrentPrice    float32     `json:"CurrentPrice"`
 	CurrentQuantity int32       `json:"CurrentQuantity"`
@@ -36,66 +36,77 @@ type currencyData struct {
 	Items []currencyItems `json:"Items"`
 }
 
-func CallApi(client *http.Client, leagueName string, pageNumber int32) ([]currencyItems, error) {
-
+// CallApi fetches a single page of results with custom headers (e.g. User-Agent)
+func CallApi(client *http.Client, leagueName string, pageNumber int) (currencyData, error) {
 	reqUrl := fmt.Sprintf("%s/%s/Currencies/ByCategory?category=currency&pageNumber=%d&pageSize=25", baseUrl, leagueName, pageNumber)
-	fmt.Println(reqUrl)
-	resp, err := client.Get(reqUrl)
+
+	req, err := http.NewRequest(http.MethodGet, reqUrl, nil)
 	if err != nil {
-		return []currencyItems{}, fmt.Errorf("error executing GET request: %w", err)
+		return currencyData{}, fmt.Errorf("error creating request: %w", err)
+	}
+
+	// Good practice for poe2scout API: include a User-Agent identifying your app
+	req.Header.Set("User-Agent", "Poe2ScoutGoClient/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return currencyData{}, fmt.Errorf("error executing GET request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return []currencyItems{}, fmt.Errorf("error reading the response body: %w", err)
+		return currencyData{}, fmt.Errorf("error reading response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return []currencyItems{}, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(bodyBytes))
+		return currencyData{}, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var respStruct currencyData
-
-	if json.Unmarshal(bodyBytes, &respStruct) != nil {
-		return []currencyItems{}, fmt.Errorf("error unmarshaling response: %w", err)
+	if err := json.Unmarshal(bodyBytes, &respStruct); err != nil {
+		return currencyData{}, fmt.Errorf("error unmarshaling response: %w", err)
 	}
 
-	if len(respStruct.Items) > 0 {
-		fmt.Println(respStruct.Items[0])
-	} else {
-		fmt.Println("The request succeeded, but the items array is empty.")
-	}
-
-	return respStruct.Items, nil
+	return respStruct, nil
 }
 
-func findItemId(client *http.Client, leagueName, currencyName string) (int, error) {
-	reqString := fmt.Sprintf("%s/%s/Currencies/%s", baseUrl, leagueName, currencyName)
+// FetchAllMonthlyData loops over all pages and filters PriceLogs to the last 30 days.
+func FetchAllMonthlyData(client *http.Client, leagueName string) ([]currencyItems, error) {
+	var allItems []currencyItems
+	currentPage := 1
+	totalPages := 1
 
-	fmt.Println(reqString)
+	cutoffDate := time.Now().AddDate(0, 0, -30)
 
-	resp, err := client.Get(reqString)
-	if err != nil {
-		return 0, fmt.Errorf("error executing GET request: %w", err)
+	for currentPage <= totalPages {
+		data, err := CallApi(client, leagueName, currentPage)
+		if err != nil {
+			return nil, fmt.Errorf("failed fetching page %d: %w", currentPage, err)
+		}
+		if data.Pages > 0 {
+			totalPages = int(data.Pages)
+		}
+
+		for _, item := range data.Items {
+			var monthlyLogs []PriceLogs
+			for _, log := range item.PriceLogs {
+				logTime, err := time.Parse(time.RFC3339, log.Time)
+				if err != nil {
+					logTime, _ = time.Parse("2006-01-02T15:04:05", log.Time)
+				}
+
+				if logTime.After(cutoffDate) {
+					monthlyLogs = append(monthlyLogs, log)
+				}
+			}
+
+			item.PriceLogs = monthlyLogs
+			allItems = append(allItems, item)
+		}
+
+		currentPage++
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("error reading response body: %w", err)
-	}
-
-	var respStruct currencyID
-
-	err = json.Unmarshal(bodyBytes, &respStruct)
-	if err != nil {
-		return 0, fmt.Errorf("error unmarshalling JSON: %w", err)
-	}
-
-	return respStruct.ItemId, nil
+	return allItems, nil
 }
