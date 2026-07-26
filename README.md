@@ -56,15 +56,33 @@ $$
 Sell_{base} = \mu_{vw} + 1.5\sigma_{vw}
 $$
 
-### 2. Order Book Imbalance (OBI)
-If we just blindly follow the bands, we're naive (volatility isn't the only variable in a market, dumbass). We also need to look at the ratio of **buyers** vs **sellers**—the Order Book Imbalance.
+### 2. Volume-Weighted Momentum Skew (VMS)
+Since poe2scout doesn't expose a live order book, we cannot look at pending buyer/seller intent. Instead, we look at actual historical aggression—whether short-term price action is ripping or dipping relative to the long-term trend, weighted by volume.
 
-* If the market is heavily weighted with **buyers** (closer to 1), we shift our entire volatility bracket upward based on the ratio. *(We keep our buy relatively low to avoid paying the hype premium).*
-* If the market is heavily weighted with **sellers** (closer to -1), we shift our entire volatility bracket downward to scoop up that cheap currency.
+We compare a short-term volume-weighted average ($\mu_{short}$, e.g., last 3 hours) against our baseline long-term average ($\mu_{vw}$, e.g., last 24 hours). To keep our skew bounded between $-1$ and $1$ (just like an OBI model), we run the deviation through a hyperbolic tangent ($\tanh$) function.
+
+* If short-term prices are surging above the trend (**VMS approaches 1**), buyers are aggressive. We shift our entire bracket upward so we don't get left behind by a breakout.
+* If short-term prices are crashing below the trend (**VMS approaches -1**), sellers are dumping. We shift our bracket downward to catch the falling knife safely.
+
+**The Momentum Skew:**
+
+$$
+VMS = \tanh \left( \frac{\mu_{short} - \mu_{vw}}{\sigma_{vw}} \right)
+$$
+
+*(Where `\mu_{short}` is the VWMA of a narrow window, `\mu_{vw}` is the long-term VWMA window, and `\sigma_{vw}` is the long-term standard deviation to scale the variance.)*
+
+**The Skew Adjustment:**
+
+$$
+Skew = VMS \times 1.5
+$$
+
+*(Where 1.5 is a tuning constant.)*
 
 > ***"But, like, what if something just keeps spiraling into oblivion?"***
-> 
-> We just keep a max position size? Duh?
+>  
+> If VMS locks at -1, our target buy price drops heavily, protecting us from buying into a dead economy until the velocity flattens out.
 
 ### 3. Bulk Premium
 You know what sucks? Buying 100 Divine Orbs here, 50 there, and another 70 somewhere else. 
@@ -86,6 +104,20 @@ $$
 ## The Final Formula
 
 Bringing it all together, our dynamic target limits look like this:
+
+**Target Buy:**
+
+$$
+Buy_{final} = \mu_{vw} - 2.5\sigma_{vw} + (VMS \times 1.5\sigma_{vw})
+$$
+
+**Target Sell:**
+
+$$
+Sell_{final} = \mu_{vw} + 1.5\sigma_{vw} + (VMS \times 1.5\sigma_{vw}) + Premium_{bulk}
+$$
+
+---
 
 ### Disclaimer
 *This model does not yet incorporate in-game Gold fees (YET).*
