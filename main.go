@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"kingsmarch-koinery/apiCalls"
 	"log"
@@ -14,13 +15,31 @@ import (
 )
 
 func main() {
+	printMode := flag.Bool("print", false, "print all stored snapshots and exit")
+	wipe := flag.Bool("wipe", false, "delete the storage file and exit")
+	flag.Parse()
+
 	client := http.DefaultClient
+
+	league := os.Getenv("LEAGUE")
+	if league == "" {
+		league = "runes"
+	}
 
 	// Persistent DuckDB file so hourly snapshots survive restarts.
 	dbPath := os.Getenv("DUCKDB_PATH")
 	if dbPath == "" {
 		dbPath = "./data/prices.duckdb"
 	}
+
+	if *wipe {
+		if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
+			log.Fatal(err)
+		}
+		log.Printf("wiped storage: %s", dbPath)
+		return
+	}
+
 	if dir := filepath.Dir(dbPath); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatal(err)
@@ -37,14 +56,69 @@ func main() {
 		log.Fatal(err)
 	}
 
-	data, err := apiCalls.CallApi(client, "runes", 1)
-	if err != nil {
-		fmt.Printf("error calling data: %s", err)
+	if *printMode {
+		dumpSnapshots(db)
 		return
 	}
-	for _, v := range data.Items {
-		fmt.Printf("%d %s/s for %f Exalted Orbs each at %v\n", v.CurrentQuantity, v.Name, v.CurrentPrice, time.Now())
+
+	// Store hourly forever.
+	storeHourly(db, client, league)
+}
+
+// dumpSnapshots prints every stored snapshot (name, price, quantity, ts).
+func dumpSnapshots(db *sql.DB) {
+	rows, err := db.Query(`SELECT name, price, quantity, ts FROM price_snapshots ORDER BY ts, name`)
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer rows.Close()
+
+	var (
+		name     string
+		price    float64
+		quantity int64
+		ts       time.Time
+	)
+	for rows.Next() {
+		if err := rows.Scan(&name, &price, &quantity, &ts); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%s\t%f\t%d\t%s\n", name, price, quantity, ts.Format(time.RFC3339))
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// storeHourly stores a snapshot immediately, then once every hour.
+func storeHourly(db *sql.DB, client *http.Client, league string) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if err := storeSnapshot(db, client, league); err != nil {
+			log.Printf("store snapshot: %v", err)
+		}
+		<-ticker.C
+	}
+}
+
+// storeSnapshot fetches all currencies and inserts them as an hourly snapshot.
+func storeSnapshot(db *sql.DB, client *http.Client, league string) error {
+	items, err := apiCalls.FetchAll(client, league)
+	if err != nil {
+		return err
+	}
+	ts := time.Now().Truncate(time.Hour)
+	for _, it := range items {
+		if _, err := db.Exec(
+			`INSERT OR IGNORE INTO price_snapshots (name, price, quantity, ts) VALUES (?, ?, ?, ?)`,
+			it.Name, it.CurrentPrice, it.CurrentQuantity, ts,
+		); err != nil {
+			return err
+		}
+	}
+	log.Printf("stored %d currency snapshots at %s", len(items), ts.Format(time.RFC3339))
+	return nil
 }
 
 // ensureSchema creates the price_snapshots table if it doesn't exist.

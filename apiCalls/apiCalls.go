@@ -58,20 +58,13 @@ func CallApi(client *http.Client, leagueName string, pageNumber int) (currencyDa
 	return respStruct, nil
 }
 
-// FetchAll fetches every page of a league's currency data, aggregating all items.
+// FetchAll returns the full set of a league's currency items.
+// Note: the poe2scout endpoint ignores pageNumber/pageSize and always returns
+// the same single page of items, so there is nothing to paginate over.
 func FetchAll(client *http.Client, leagueName string) ([]currencyItems, error) {
 	first, err := CallApi(client, leagueName, 1)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching first page: %w", err)
+		return nil, fmt.Errorf("error fetching currency data: %w", err)
 	}
-
-	all := first.Items
-	for p := 2; p <= int(first.Pages); p++ {
-		page, err := CallApi(client, leagueName, p)
-		if err != nil {
-			return nil, fmt.Errorf("error fetching page %d: %w", p, err)
-		}
-		all = append(all, page.Items...)
-	}
-	return all, nil
+	return first.Items, nil
 }
