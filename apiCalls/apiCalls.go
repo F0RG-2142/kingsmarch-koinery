@@ -7,7 +7,8 @@ import (
 	"net/http"
 )
 
-var baseUrl = "https://api.poe2scout.com/poe2/Leagues"
+// BaseURL is the poe2scout API root. Exported so tests can point it at a mock server.
+var BaseURL = "https://api.poe2scout.com/poe2/Leagues"
 
 type currencyItems struct {
 	UniqueItemId    int     `json:"UniqueItemId"`
@@ -25,7 +26,7 @@ type currencyData struct {
 
 // CallApi fetches a single page of results with custom headers (e.g. User-Agent)
 func CallApi(client *http.Client, leagueName string, pageNumber int) (currencyData, error) {
-	reqUrl := fmt.Sprintf("%s/%s/Currencies/ByCategory?category=currency&pageNumber=%d&pageSize=100", baseUrl, leagueName, pageNumber)
+	reqUrl := fmt.Sprintf("%s/%s/Currencies/ByCategory?category=currency&pageNumber=%d&pageSize=100", BaseURL, leagueName, pageNumber)
 
 	req, err := http.NewRequest(http.MethodGet, reqUrl, nil)
 	if err != nil {
