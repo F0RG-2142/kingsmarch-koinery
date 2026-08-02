@@ -17,6 +17,7 @@ import (
 func main() {
 	printMode := flag.Bool("print", false, "print all stored snapshots and exit")
 	wipe := flag.Bool("wipe", false, "delete the storage file and exit")
+	analyzeMode := flag.Bool("analyze", false, "run analysis once and exit")
 	flag.Parse()
 
 	client := http.DefaultClient
@@ -61,11 +62,28 @@ func main() {
 		return
 	}
 
+	if *analyzeMode {
+		recs, err := analyze(db, time.Now())
+		if err != nil {
+			log.Printf("analysis: %v", err)
+			return
+		}
+		fmt.Printf("%s\t%s\t%s\t%s\t%s\n", "name", "current", "buy", "sell", "spread%")
+		for _, r := range recs {
+			spread := 0.0
+			if r.BuyTarget > 0 {
+				spread = (r.SellTarget - r.BuyTarget) / r.BuyTarget * 100
+			}
+			fmt.Printf("%s\t%.4f\t%.4f\t%.4f\t%.2f\n", r.Name, r.Current, r.BuyTarget, r.SellTarget, spread)
+		}
+		return
+	}
+
 	// Store hourly forever.
 	storeHourly(db, client, league)
 }
 
-// dumpSnapshots prints every stored snapshot (name, price, quantity, ts).
+// dumpSnapshots prints every stored snapshot
 func dumpSnapshots(db *sql.DB) {
 	rows, err := db.Query(`SELECT name, price, quantity, ts FROM price_snapshots ORDER BY ts, name`)
 	if err != nil {
