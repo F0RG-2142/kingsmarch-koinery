@@ -6,6 +6,7 @@ import (
 	"kingsmarch-koinery/apiCalls"
 	"log"
 	"net/http"
+	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
 )
@@ -24,14 +25,12 @@ func main() {
 	}
 	defer db.Close()
 
-	data, err := apiCalls.FetchAllMonthlyData(client, "runes")
+	data, err := apiCalls.CallApi(client, "runes", 1)
 	if err != nil {
 		fmt.Printf("error calling data: %s", err)
 		return
 	}
-	for _, v := range data {
-		for _, p := range v.PriceLogs {
-			fmt.Printf("%d %s/s for %f Exalted Orbs each, at %v. Current price is %f\n", p.Quantity, v.Name, p.Price, p.Time, v.CurrentPrice)
-		}
+	for _, v := range data.Items {
+		fmt.Printf("%d %s/s for %f Exalted Orbs each at %v\n", v.CurrentQuantity, v.Name, v.CurrentPrice, time.Now())
 	}
 }
