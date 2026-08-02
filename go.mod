@@ -2,7 +2,10 @@ module kingsmarch-koinery
 
 go 1.25
 
-require github.com/duckdb/duckdb-go/v2 v2.10505.0
+require (
+	github.com/duckdb/duckdb-go/v2 v2.10505.0
+	github.com/joho/godotenv v1.5.1
+)
 
 require (
 	github.com/apache/arrow-go/v18 v18.5.1 // indirect

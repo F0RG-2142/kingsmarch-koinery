@@ -3,11 +3,11 @@
 
 **UPDATE:** Decided to use the [poe2scout API](https://api.poe2scout.com/swagger/index.html)
 
-Using currency by category to page over currency prices for the past month now.
+Using currency by category to track currency prices. Note: the endpoint ignores `pageNumber`/`pageSize` and always returns the same single page of items.
 
 There is also only per-day data so we cant make per-hour trades like I hoped. It will have to send out after each day completes for the most up-to-date data.
  
-Only have daily volume endpoints, BUT the "current price" and "current volume" fields get updated every hour, so I will have to shift from a stateless design to a stateful implementation saving api calls every hour.
+Only have daily volume endpoints, BUT the "current price" and "current volume" fields get updated every hour, so the design is **stateful**: we save an API snapshot to DuckDB every hour and run the analysis on the accumulated history.
 
 `OBI Discontinued`
 
@@ -95,3 +95,49 @@ Chaos Orb: 160 Gold (Item ID: chaos)
 Exalted Orb: 120 Gold (Item ID: exalted)
 
 Divine Orb: 800 (Item ID: divine)
+
+---
+
+## Running the App
+
+**Requirements:** Go 1.25+
+
+**1. Configure** — copy the template and fill in your Discord webhook URL:
+```bash
+cp .env.example .env
+# edit .env → set DISCORD_WEBHOOK_URL to your webhook
+```
+`.env` is auto-loaded on startup (godotenv) and is git-ignored. `.env.example` is the committed template.
+
+**2. Run the 24/7 service:**
+```bash
+go run .
+```
+- Fetches all currencies hourly and stores them in a persistent DuckDB file (`DUCKDB_PATH`, default `./data/prices.duckdb`).
+- Every **4 hours** runs the analysis and posts the top pairs to Discord.
+
+**3. Manual commands (flags):**
+
+| Flag | What it does |
+|------|--------------|
+| `-print` | Print every stored snapshot and exit |
+| `-wipe` | Delete the storage file and exit (start over) |
+| `-analyze` | Run the analysis once and print the table (no send) |
+| `-send` | Run the real analysis once and post to Discord |
+| `-send-test` | Post a sample embed to verify your webhook works |
+
+**Config (`.env`):**
+- `LEAGUE` — league slug (default `runes`)
+- `DUCKDB_PATH` — persistent DB file (default `./data/prices.duckdb`)
+- `DISCORD_WEBHOOK_URL` — webhook for alerts (required for `-send`/`-send-test`/scheduled alerts)
+
+**Cold start:** analysis needs ~48h of accumulated hourly snapshots before it produces real buy/sell targets. Until then `-analyze`/`-send` report `not enough history yet (<48h)`. Use `-send-test` to verify Discord connectivity immediately.
+
+**Tests:**
+```bash
+go test ./...
+```
+Covers API parsing, snapshot storage, the analysis math (incl. cold-start guard), and the Discord embed format.
+
+**Data storage:** everything lives in one DuckDB file. `-wipe` (or deleting the file) resets it.
+

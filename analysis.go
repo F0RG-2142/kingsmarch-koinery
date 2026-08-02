@@ -17,6 +17,7 @@ var errNotEnoughHistory = errors.New("not enough history yet (<48h)")
 // recommendation holds the computed buy/sell targets for one currency.
 type recommendation struct {
 	Name       string
+	Display    string
 	Current    float64
 	BuyTarget  float64
 	SellTarget float64
@@ -26,7 +27,6 @@ type recommendation struct {
 // stats and the Volume-Weighted Momentum Skew (VMS), all inside DuckDB.
 func analyze(db *sql.DB, now time.Time) ([]recommendation, error) {
 	// Cold-start guard: we need at least minHistory of accumulated snapshots
-	// before the short/long windows have real data to work with.
 	var minTs sql.NullTime
 	if err := db.QueryRow(`SELECT MIN(ts) FROM price_snapshots`).Scan(&minTs); err != nil {
 		return nil, err
@@ -63,21 +63,22 @@ short_stats AS (
     FROM short_w GROUP BY name
 ),
 latest AS (
-    SELECT name, price, quantity,
+    SELECT name, text, price, quantity,
            ROW_NUMBER() OVER (PARTITION BY name ORDER BY ts DESC) AS rn
     FROM price_snapshots
 ),
 cur AS (
-    SELECT name, price AS cur, quantity AS cur_quantity
+    SELECT name, text, price AS cur, quantity AS cur_quantity
     FROM latest WHERE rn = 1
 ),
 combined AS (
-    SELECT c.name, c.cur, c.cur_quantity, sig.mu, sig.sigma, ss.mu_short
+    SELECT c.name, c.text, c.cur, c.cur_quantity, sig.mu, sig.sigma, ss.mu_short
     FROM cur c
     JOIN sigma sig USING (name)
     JOIN short_stats ss USING (name)
 )
-SELECT name, cur,
+SELECT name, text,
+       cur,
        mu - 2.5*sigma + LEAST(GREATEST((mu_short - mu)/NULLIF(mu,0), -1), 1)*sigma AS buy_target,
        mu + 1.5*sigma + LEAST(GREATEST((mu_short - mu)/NULLIF(mu,0), -1), 1)*sigma
            + CASE WHEN cur_quantity >= 500 THEN 0.5*sigma ELSE 0 END AS sell_target
@@ -93,7 +94,7 @@ ORDER BY name`
 	var recs []recommendation
 	for rows.Next() {
 		var r recommendation
-		if err := rows.Scan(&r.Name, &r.Current, &r.BuyTarget, &r.SellTarget); err != nil {
+		if err := rows.Scan(&r.Name, &r.Display, &r.Current, &r.BuyTarget, &r.SellTarget); err != nil {
 			return nil, err
 		}
 		recs = append(recs, r)

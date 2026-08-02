@@ -12,12 +12,18 @@ import (
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env if present (missing file is fine).
+	_ = godotenv.Load()
+
 	printMode := flag.Bool("print", false, "print all stored snapshots and exit")
 	wipe := flag.Bool("wipe", false, "delete the storage file and exit")
 	analyzeMode := flag.Bool("analyze", false, "run analysis once and exit")
+	sendMode := flag.Bool("send", false, "run analysis once and send to Discord, then exit")
+	testSendMode := flag.Bool("send-test", false, "send a sample embed to Discord to verify the webhook, then exit")
 	flag.Parse()
 
 	client := http.DefaultClient
@@ -79,8 +85,50 @@ func main() {
 		return
 	}
 
-	// Store hourly forever.
-	storeHourly(db, client, league)
+	// Store hourly forever, analyze every 4h.
+	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+
+	if *sendMode {
+		if webhookURL == "" {
+			log.Fatal("DISCORD_WEBHOOK_URL is required for -send")
+		}
+		analyzeAndSend(db, webhookURL)
+		return
+	}
+
+	if *testSendMode {
+		if webhookURL == "" {
+			log.Fatal("DISCORD_WEBHOOK_URL is required for -send-test")
+		}
+		sample := []recommendation{
+			{Name: "divine", Display: "Divine Orb", Current: 423.15, BuyTarget: 376.47, SellTarget: 422.94},
+			{Name: "exalted", Display: "Exalted Orb", Current: 142.80, BuyTarget: 119.21, SellTarget: 143.03},
+			{Name: "chaos", Display: "Chaos Orb", Current: 44.50, BuyTarget: 40.00, SellTarget: 48.00},
+		}
+		if err := sendDiscord(webhookURL, buildEmbed(sample, time.Now())); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("sent sample embed to discord")
+		return
+	}
+
+	go storeHourly(db, client, league)
+	analyzeEvery(db, webhookURL)
+}
+
+// analyzeEvery runs the analysis and sends to Discord on a 4-hour cycle.
+// If no webhook URL is set there is nothing to send, so it just blocks.
+func analyzeEvery(db *sql.DB, webhookURL string) {
+	if webhookURL == "" {
+		log.Println("no DISCORD_WEBHOOK_URL set; scheduled analysis disabled")
+		select {}
+	}
+	ticker := time.NewTicker(analyzeInterval)
+	defer ticker.Stop()
+	for {
+		analyzeAndSend(db, webhookURL)
+		<-ticker.C
+	}
 }
 
 // dumpSnapshots prints every stored snapshot
@@ -122,33 +170,41 @@ func storeHourly(db *sql.DB, client *http.Client, league string) {
 
 // storeSnapshot fetches all currencies and inserts them as an hourly snapshot.
 func storeSnapshot(db *sql.DB, client *http.Client, league string) error {
-	items, err := apiCalls.FetchAll(client, league)
+	data, err := apiCalls.CallApi(client, league, 1)
 	if err != nil {
 		return err
 	}
 	ts := time.Now().Truncate(time.Hour)
-	for _, it := range items {
+	for _, it := range data.Items {
 		if _, err := db.Exec(
-			`INSERT OR IGNORE INTO price_snapshots (name, price, quantity, ts) VALUES (?, ?, ?, ?)`,
-			it.Name, it.CurrentPrice, it.CurrentQuantity, ts,
+			`INSERT OR IGNORE INTO price_snapshots (name, price, quantity, ts, text) VALUES (?, ?, ?, ?, ?)`,
+			it.Name, it.CurrentPrice, it.CurrentQuantity, ts, it.Text,
 		); err != nil {
 			return err
 		}
 	}
-	log.Printf("stored %d currency snapshots at %s", len(items), ts.Format(time.RFC3339))
+	log.Printf("stored %d currency snapshots at %s", len(data.Items), ts.Format(time.RFC3339))
 	return nil
 }
 
-// ensureSchema creates the price_snapshots table if it doesn't exist.
+// ensureSchema creates the price_snapshots table if it doesn't exist, then
+// migrates older tables to have the display-name (text) column.
 func ensureSchema(db *sql.DB) error {
-	_, err := db.Exec(`
+	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS price_snapshots (
 			name     VARCHAR,
 			price    DOUBLE,
 			quantity BIGINT,
 			ts       TIMESTAMP,
+			text     VARCHAR,
 			PRIMARY KEY (name, ts)
 		)
-	`)
-	return err
+	`); err != nil {
+		return err
+	}
+	// Migration for DBs created before the text column existed.
+	if _, err := db.Exec(`ALTER TABLE price_snapshots ADD COLUMN IF NOT EXISTS text VARCHAR`); err != nil {
+		return err
+	}
+	return nil
 }

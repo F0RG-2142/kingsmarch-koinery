@@ -9,8 +9,8 @@ import (
 const testPayload = `{
 	"Total": 2, "Pages": 1,
 	"Items": [
-		{"UniqueItemId":1,"ItemId":1,"ApiId":"chaos","CurrentPrice":44.5,"CurrentQuantity":100},
-		{"UniqueItemId":2,"ItemId":2,"ApiId":"divine","CurrentPrice":367.5,"CurrentQuantity":200}
+		{"UniqueItemId":1,"ItemId":1,"ApiId":"chaos","Text":"Chaos Orb","CurrentPrice":44.5,"CurrentQuantity":100},
+		{"UniqueItemId":2,"ItemId":2,"ApiId":"divine","Text":"Divine Orb","CurrentPrice":367.5,"CurrentQuantity":200}
 	]
 }`
 
@@ -22,24 +22,25 @@ func mockServer(payload string, status int) *httptest.Server {
 	}))
 }
 
-func TestFetchAll(t *testing.T) {
+func TestCallApi(t *testing.T) {
 	srv := mockServer(testPayload, http.StatusOK)
 	defer srv.Close()
 
 	BaseURL = srv.URL + "/poe2/Leagues"
 	defer func() { BaseURL = "https://api.poe2scout.com/poe2/Leagues" }()
 
-	items, err := FetchAll(http.DefaultClient, "runes")
+	data, err := CallApi(http.DefaultClient, "runes", 1)
 	if err != nil {
-		t.Fatalf("FetchAll: %v", err)
+		t.Fatalf("CallApi: %v", err)
 	}
+	items := data.Items
 	if len(items) != 2 {
 		t.Fatalf("want 2 items, got %d", len(items))
 	}
-	if items[0].Name != "chaos" || items[0].CurrentPrice != 44.5 {
+	if items[0].Name != "chaos" || items[0].CurrentPrice != 44.5 || items[0].Text != "Chaos Orb" {
 		t.Errorf("unexpected first item: %+v", items[0])
 	}
-	if items[1].Name != "divine" || items[1].CurrentQuantity != 200 {
+	if items[1].Name != "divine" || items[1].CurrentQuantity != 200 || items[1].Text != "Divine Orb" {
 		t.Errorf("unexpected second item: %+v", items[1])
 	}
 }
