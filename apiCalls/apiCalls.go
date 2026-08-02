@@ -57,3 +57,21 @@ func CallApi(client *http.Client, leagueName string, pageNumber int) (currencyDa
 
 	return respStruct, nil
 }
+
+// FetchAll fetches every page of a league's currency data, aggregating all items.
+func FetchAll(client *http.Client, leagueName string) ([]currencyItems, error) {
+	first, err := CallApi(client, leagueName, 1)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching first page: %w", err)
+	}
+
+	all := first.Items
+	for p := 2; p <= int(first.Pages); p++ {
+		page, err := CallApi(client, leagueName, p)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching page %d: %w", p, err)
+		}
+		all = append(all, page.Items...)
+	}
+	return all, nil
+}
