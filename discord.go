@@ -101,7 +101,6 @@ func sendMultipart(webhookURL, imagePath string, recs []recommendation, now time
 	body := &bytes.Buffer{}
 	mw := multipart.NewWriter(body)
 
-	// File part.
 	f, err := os.Open(imagePath)
 	if err != nil {
 		return err
@@ -115,7 +114,6 @@ func sendMultipart(webhookURL, imagePath string, recs []recommendation, now time
 		return err
 	}
 
-	// Embed summary referencing the attachment by filename.
 	payload := discordPayload{
 		Username: "PoE2 Scout",
 		Embeds: []discordEmbed{{

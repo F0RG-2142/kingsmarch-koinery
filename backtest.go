@@ -10,11 +10,10 @@ import (
 
 // Backtest config. PriceLogs is per-day, so the rolling window is in days.
 const (
-	backtestWindow   = 3 // rolling lookback (in daily price points)
+	backtestWindow    = 3
 	backtestMinPoints = 6
 )
 
-// buy/sell multiplier grid searched per currency.
 var (
 	backtestKs = []float64{1.5, 2.0, 2.5, 3.0}
 	backtestJs = []float64{1.0, 1.5, 2.0}
@@ -26,14 +25,12 @@ type btResult struct {
 	K, J        float64
 	Trades      int
 	WinRate     float64
-	AvgReturn   float64 // fractional return per closed trade
-	TotalReturn float64 // compounded fractional return across all trades
-	MaxDD       float64 // fractional max drawdown on the compounded curve
+	AvgReturn   float64
+	TotalReturn float64
+	MaxDD       float64
 }
 
 // runBacktest fetches current PriceLogs and reports the best (buy, sell)
-// band multipliers per currency, so the σ multipliers are data-driven rather
-// than guessed.
 func runBacktest(client *http.Client, league string) {
 	data, err := apiCalls.CallApi(client, league, 1)
 	if err != nil {
@@ -50,7 +47,6 @@ func runBacktest(client *http.Client, league string) {
 		for _, pl := range it.PriceLogs {
 			prices = append(prices, pl.Price)
 		}
-		// PriceLogs is newest-first; reverse so the simulation runs oldest→newest.
 		reverse(prices)
 
 		if len(prices) < backtestMinPoints {
@@ -90,10 +86,7 @@ func bestParams(prices []float64, window int) btResult {
 	return best
 }
 
-// bandSim runs the asymmetric mean-reversion strategy over a price series:
-// enter long when price dips below (rolling mean − k·σ); exit when it rises
-// back above (rolling mean + j·σ). Returns the per-trade returns and the max
-// drawdown of the compounded curve.
+// bandSim runs the asymmetric mean-reversion strategy over a price series
 func bandSim(prices []float64, window int, k, j float64) (rets []float64, maxDD float64) {
 	n := len(prices)
 	equity, peak := 1.0, 1.0
@@ -105,7 +98,6 @@ func bandSim(prices []float64, window int, k, j float64) (rets []float64, maxDD 
 		}
 		p := prices[i]
 		if p < mu-k*sd {
-			// Enter long.
 			buy := p
 			j2 := i + 1
 			for ; j2 < n; j2++ {

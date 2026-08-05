@@ -4,12 +4,10 @@ import "testing"
 
 func TestColumnPositionsDontOverflow(t *testing.T) {
 	cols := columnPositions()
-	// Currency column should be left-aligned at padding+12.
 	if cols[0].LeftX != 36 {
 		t.Errorf("Currency LeftX = %d, want 36", cols[0].LeftX)
 	}
-	// Rightmost column (Spread) should not exceed the image right margin.
-	maxSpreadRight := 1280 - 24 - 100 // image - padding - right margin
+	maxSpreadRight := 1280 - 24 - 100
 	if cols[6].RightX > maxSpreadRight {
 		t.Errorf("Spread right edge %d exceeds max %d", cols[6].RightX, maxSpreadRight)
 	}
