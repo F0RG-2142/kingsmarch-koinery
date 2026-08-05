@@ -1,19 +1,22 @@
 # PoE2 Stat-Arb & Volatility Trading
 *Statistical Arbitrage and Volatility Trading in Path of Exile 2*
 
-**UPDATE:** Decided to use the [poe2scout API](https://api.poe2scout.com/swagger/index.html)
+Here is a screenshot of what the analysis message looks like:
 
-Using currency by category to track currency prices. Note: the endpoint ignores `pageNumber`/`pageSize` and always returns the same single page of items.
+<img width="1280" height="925" alt="image" src="https://github.com/user-attachments/assets/67b54b2b-4140-49a4-acbb-d014a7436b99" />
+
+I'm using the [poe2scout API](https://api.poe2scout.com/swagger/index.html)
+
+Using currency by category to track currency prices. Note: the endpoint ignores `pageNumber`/`pageSize` and always returns the same single page of items (in my experience?).
 
 The API exposes **per-day `PriceLogs`** for each currency, but not per-hour history. However, the "current price" and "current volume" fields update every hour, so the design is **stateful**: we save an API snapshot to DuckDB every hour and run the analysis on the accumulated history. The daily `PriceLogs` are parsed too and feed the **backtest** (see below).
 
-`OBI Discontinued`
 
 ---
 
 ## The Pipeline
 
-> **Pull API Data** (every 60 mins) ➔ **Run Math™** (analyze promising currencies) ➔ **Discord Alerts** (send top 5-10 pairs every few hours) ➔ **Manual Execution** (automation is illegal, don't get banned)
+> **Pull API Data** (every 60 mins) ➔ **Run Math™** (analyze promising currencies) ➔ **Discord Alerts** (send top 10 pairs every few hours) ➔ **Manual Execution** (automation is illegal, don't get banned)
 
 ---
 
