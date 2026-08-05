@@ -5,10 +5,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"image/png"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
-	"sort"
+	"os"
+	"path/filepath"
 	"time"
+
+	"kingsmarch-koinery/render"
 )
 
 const (
@@ -28,69 +34,116 @@ type discordEmbed struct {
 	Color       int            `json:"color"`
 	Timestamp   string         `json:"timestamp"`
 	Fields      []discordField `json:"fields"`
+	Image       *discordImage  `json:"image,omitempty"`
+}
+
+type discordImage struct {
+	URL string `json:"url"`
 }
 
 type discordPayload struct {
-	Embeds []discordEmbed `json:"embeds"`
+	Content   string         `json:"content,omitempty"`
+	Embeds    []discordEmbed `json:"embeds"`
+	Username  string         `json:"username,omitempty"`
+	AvatarURL string         `json:"avatar_url,omitempty"`
 }
 
-// buildEmbed renders recommendations as a Discord webhook embed payload,
-// ordered by spread (sell - buy) so the most profitable pairs come first.
-func buildEmbed(recs []recommendation, now time.Time) []byte {
-	sorted := make([]recommendation, len(recs))
-	copy(sorted, recs)
-	sort.Slice(sorted, func(i, j int) bool {
-		return spreadOf(sorted[i]) > spreadOf(sorted[j])
-	})
-	if len(sorted) > maxPairs {
-		sorted = sorted[:maxPairs]
+// analyzeAndSend runs the analysis once, generates a PNG, and posts it to Discord.
+func analyzeAndSend(db *sql.DB, webhookURL string) {
+	recs, err := analyze(db, time.Now())
+	if err != nil {
+		log.Printf("analysis: %v", err)
+		return
 	}
-
-	embed := discordEmbed{
-		Title:       "PoE2 Currency Analysis",
-		Description: "All prices in Exalted Orbs",
-		Color:       0xf1c40f, // gold, fitting the currency theme
-		Timestamp:   now.UTC().Format(time.RFC3339),
-		Fields:      make([]discordField, 0, len(sorted)),
+	if err := sendAnalysisDiscord(webhookURL, recs, time.Now()); err != nil {
+		log.Printf("send discord: %v", err)
+		return
 	}
-	for _, r := range sorted {
-		embed.Fields = append(embed.Fields, discordField{
-			Name:  displayOf(r),
-			Value: "```\n" + tableOf(r) + "```",
-		})
-	}
-	payload, _ := json.Marshal(discordPayload{Embeds: []discordEmbed{embed}})
-	return payload
+	log.Printf("sent analysis to discord (%d pairs)", len(recs))
 }
 
-// tableOf renders one currency's mini-table as a monospaced block.
-func tableOf(r recommendation) string {
-	return fmt.Sprintf(
-		"%-8s %9.2f\n%-8s %9.2f\n%-8s %9.2f\n%-8s %8.1f%%",
-		"Current", r.Current,
-		"Buy", r.BuyTarget,
-		"Sell", r.SellTarget,
-		"Spread", spreadOf(r),
-	)
-}
-
-func displayOf(r recommendation) string {
-	if r.Display != "" {
-		return r.Display
+// sendAnalysisDiscord renders the table to a PNG, POSTs it as a multipart
+// attachment to the webhook, then cleans up the temp file.
+func sendAnalysisDiscord(webhookURL string, recs []recommendation, now time.Time) error {
+	// Convert to render.Recommendation.
+	rRecs := make([]render.Recommendation, len(recs))
+	for i, r := range recs {
+		rRecs[i] = render.Recommendation{
+			Name:       r.Name,
+			Display:    r.Display,
+			Current:    r.Current,
+			BuyTarget:  r.BuyTarget,
+			SellTarget: r.SellTarget,
+			BulkSell:   r.BulkSell,
+			HalfLife:   r.HalfLife,
+		}
 	}
-	return r.Name
-}
 
-func spreadOf(r recommendation) float64 {
-	if r.BuyTarget <= 0 {
-		return 0
+	league := "runes"
+	img := render.Table(rRecs, league, "PoE2 Currency Analysis")
+
+	// Save to a temp file.
+	tmp, err := os.CreateTemp("", "poe2-analysis-*.png")
+	if err != nil {
+		return err
 	}
-	return (r.SellTarget - r.BuyTarget) / r.BuyTarget * 100
+	defer os.Remove(tmp.Name())
+	if err := png.Encode(tmp, img); err != nil {
+		return err
+	}
+	tmp.Close()
+
+	return sendMultipart(webhookURL, tmp.Name(), recs, now)
 }
 
-// sendDiscord posts a JSON payload to a Discord webhook URL.
-func sendDiscord(webhookURL string, payload []byte) error {
-	resp, err := http.Post(webhookURL, "application/json", bytes.NewReader(payload))
+// sendMultipart POSTs the PNG file along with a small embed summary.
+func sendMultipart(webhookURL, imagePath string, recs []recommendation, now time.Time) error {
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+
+	// File part.
+	f, err := os.Open(imagePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	filePart, err := mw.CreateFormFile("files[0]", filepath.Base(imagePath))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(filePart, f); err != nil {
+		return err
+	}
+
+	// Embed summary referencing the attachment by filename.
+	payload := discordPayload{
+		Username: "PoE2 Scout",
+		Embeds: []discordEmbed{{
+			Title:       "PoE2 Currency Analysis",
+			Description: "All prices in Exalted Orbs. Bulk = order \u2265 500",
+			Color:       0xf1c40f,
+			Timestamp:   now.UTC().Format(time.RFC3339),
+			Image:       &discordImage{URL: "attachment://" + filepath.Base(imagePath)},
+		}},
+	}
+	pj, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if err := mw.WriteField("payload_json", string(pj)); err != nil {
+		return err
+	}
+	if err := mw.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, webhookURL, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -99,18 +152,4 @@ func sendDiscord(webhookURL string, payload []byte) error {
 		return fmt.Errorf("discord returned status %d", resp.StatusCode)
 	}
 	return nil
-}
-
-// analyzeAndSend runs the analysis once and posts results to Discord.
-func analyzeAndSend(db *sql.DB, webhookURL string) {
-	recs, err := analyze(db, time.Now())
-	if err != nil {
-		log.Printf("analysis: %v", err)
-		return
-	}
-	if err := sendDiscord(webhookURL, buildEmbed(recs, time.Now())); err != nil {
-		log.Printf("send discord: %v", err)
-		return
-	}
-	log.Printf("sent analysis to discord (%d pairs)", len(recs))
 }

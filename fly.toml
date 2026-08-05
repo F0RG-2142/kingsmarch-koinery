@@ -1,0 +1,26 @@
+# Fly.io configuration for kingsmarch-koinery.
+# Uses Fly's automatic Go builder (there is no Dockerfile); go.mod is at repo root.
+#
+# NOTE: the app is a long-running outbound-only daemon — it exposes no ports.
+# Its entire strategy depends on the DuckDB history file accumulating ~48h of
+# hourly snapshots, so DUCKDB_PATH must live on a persistent volume (ephemeral
+# container filesystem is wiped on every restart/redeploy).
+
+app = "kingsmarch-koinery"
+
+# No [build] section: Fly's automatic builder detects the Go module (go.mod)
+# and builds/runs the app for us.
+
+[env]
+  # Keep the DB on the mounted volume so history survives restarts/redeploys.
+  DUCKDB_PATH = "/data/prices.duckdb"
+  # LEAGUE defaults to "runes" in the app; set here only if you need another.
+  # LEAGUE = "runes"
+
+# Persistent volume "data" mounted at /data.
+[[mounts]]
+  source = "data"
+  destination = "/data"
+
+# Set your webhook URL as a Fly secret (never commit it):
+#   fly secrets set DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
