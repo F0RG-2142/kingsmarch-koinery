@@ -22,6 +22,7 @@ func main() {
 	printMode := flag.Bool("print", false, "print all stored snapshots and exit")
 	wipe := flag.Bool("wipe", false, "delete the storage file and exit")
 	analyzeMode := flag.Bool("analyze", false, "run analysis once and exit")
+	backtestMode := flag.Bool("backtest", false, "backtest band multipliers on PriceLogs and print the best (k,j) per currency, then exit")
 	sendMode := flag.Bool("send", false, "run analysis once and send to Discord, then exit")
 	testSendMode := flag.Bool("send-test", false, "send a sample embed to Discord to verify the webhook, then exit")
 	flag.Parse()
@@ -85,6 +86,11 @@ func main() {
 		return
 	}
 
+	if *backtestMode {
+		runBacktest(client, league)
+		return
+	}
+
 	// Store hourly forever, analyze every 4h.
 	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
 
@@ -101,14 +107,15 @@ func main() {
 			log.Fatal("DISCORD_WEBHOOK_URL is required for -send-test")
 		}
 		sample := []recommendation{
-			{Name: "divine", Display: "Divine Orb", Current: 423.15, BuyTarget: 376.47, SellTarget: 422.94},
-			{Name: "exalted", Display: "Exalted Orb", Current: 142.80, BuyTarget: 119.21, SellTarget: 143.03},
-			{Name: "chaos", Display: "Chaos Orb", Current: 44.50, BuyTarget: 40.00, SellTarget: 48.00},
+			{Name: "divine", Display: "Divine Orb", Current: 423.15, BuyTarget: 376.47, SellTarget: 422.94, BulkSell: 422.94},
+			{Name: "exalted", Display: "Exalted Orb", Current: 142.80, BuyTarget: 119.21, SellTarget: 143.03, BulkSell: 143.03},
+			{Name: "chaos", Display: "Chaos Orb", Current: 44.50, BuyTarget: 40.00, SellTarget: 48.00, BulkSell: 48.00},
+			{Name: "mirror", Display: "Mirror of Kalandra", Current: 1767897.60, BuyTarget: 1600000.00, SellTarget: 1800000.00, BulkSell: 1800000.00},
 		}
-		if err := sendDiscord(webhookURL, buildEmbed(sample, time.Now())); err != nil {
+		if err := sendAnalysisDiscord(webhookURL, sample, time.Now()); err != nil {
 			log.Fatal(err)
 		}
-		log.Println("sent sample embed to discord")
+		log.Println("sent sample PNG to discord")
 		return
 	}
 

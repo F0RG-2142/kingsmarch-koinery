@@ -9,7 +9,8 @@ import (
 const testPayload = `{
 	"Total": 2, "Pages": 1,
 	"Items": [
-		{"UniqueItemId":1,"ItemId":1,"ApiId":"chaos","Text":"Chaos Orb","CurrentPrice":44.5,"CurrentQuantity":100},
+		{"UniqueItemId":1,"ItemId":1,"ApiId":"chaos","Text":"Chaos Orb","CurrentPrice":44.5,"CurrentQuantity":100,
+		 "PriceLogs":[{"Price":44.5,"Time":"2026-08-05T00:00:00Z","Quantity":100},{"Price":45.1,"Time":"2026-08-04T00:00:00Z","Quantity":90}]},
 		{"UniqueItemId":2,"ItemId":2,"ApiId":"divine","Text":"Divine Orb","CurrentPrice":367.5,"CurrentQuantity":200}
 	]
 }`
@@ -42,6 +43,13 @@ func TestCallApi(t *testing.T) {
 	}
 	if items[1].Name != "divine" || items[1].CurrentQuantity != 200 || items[1].Text != "Divine Orb" {
 		t.Errorf("unexpected second item: %+v", items[1])
+	}
+	// PriceLogs (daily history) should be parsed for items that carry it.
+	if len(items[0].PriceLogs) != 2 {
+		t.Fatalf("want 2 PriceLogs entries, got %d: %+v", len(items[0].PriceLogs), items[0].PriceLogs)
+	}
+	if items[0].PriceLogs[0].Price != 44.5 || items[0].PriceLogs[1].Quantity != 90 {
+		t.Errorf("unexpected PriceLogs contents: %+v", items[0].PriceLogs)
 	}
 }
 

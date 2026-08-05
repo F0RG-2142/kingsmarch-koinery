@@ -10,13 +10,22 @@ import (
 // BaseURL is the poe2scout API root. Exported so tests can point it at a mock server.
 var BaseURL = "https://api.poe2scout.com/poe2/Leagues"
 
+// priceLog is one entry in a currency's daily price history (PriceLogs).
+// poe2scout only exposes per-day granularity; the array is newest-first.
+type priceLog struct {
+	Price    float64 `json:"Price"`
+	Time     string  `json:"Time"`
+	Quantity int64   `json:"Quantity"`
+}
+
 type currencyItems struct {
-	UniqueItemId    int     `json:"UniqueItemId"`
-	ItemId          int     `json:"ItemId"`
-	Name            string  `json:"ApiId"`
-	Text            string  `json:"Text"`
-	CurrentPrice    float32 `json:"CurrentPrice"`
-	CurrentQuantity int32   `json:"CurrentQuantity"`
+	UniqueItemId    int        `json:"UniqueItemId"`
+	ItemId          int        `json:"ItemId"`
+	Name            string     `json:"ApiId"`
+	Text            string     `json:"Text"`
+	CurrentPrice    float64    `json:"CurrentPrice"`
+	CurrentQuantity int32      `json:"CurrentQuantity"`
+	PriceLogs       []priceLog `json:"PriceLogs"`
 }
 
 type currencyData struct {
