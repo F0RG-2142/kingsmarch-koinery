@@ -11,7 +11,6 @@ import (
 var BaseURL = "https://api.poe2scout.com/poe2/Leagues"
 
 // priceLog is one entry in a currency's daily price history (PriceLogs).
-// poe2scout only exposes per-day granularity; the array is newest-first.
 type priceLog struct {
 	Price    float64 `json:"Price"`
 	Time     string  `json:"Time"`
@@ -43,7 +42,6 @@ func CallApi(client *http.Client, leagueName string, pageNumber int) (currencyDa
 		return currencyData{}, fmt.Errorf("error creating request: %w", err)
 	}
 
-	// Good practice for poe2scout API: include a User-Agent identifying your app
 	req.Header.Set("User-Agent", "Poe2ScoutGoClient/1.0")
 
 	resp, err := client.Do(req)

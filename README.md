@@ -1,7 +1,9 @@
 # PoE2 Stat-Arb & Volatility Trading
 *Statistical Arbitrage and Volatility Trading in Path of Exile 2*
 
-Here is a screenshot of what the analysis message looks like:
+<br>The project is live and hosted, if you want access, you can probably pop me an email.<br>
+
+Here is a screenshot of what the analysis message looks like that gets sent every 4 hours:
 
 <img width="1280" height="925" alt="image" src="https://github.com/user-attachments/assets/67b54b2b-4140-49a4-acbb-d014a7436b99" />
 

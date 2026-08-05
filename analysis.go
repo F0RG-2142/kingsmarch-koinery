@@ -14,24 +14,16 @@ const (
 	minHistory  = 48 * time.Hour
 
 	// halfLifeWindow is how far back the OU mean-reversion fit looks. Mean
-	// reversion speed is a structural property, so it is measured over a longer
-	// span than the (24h) band window, which only prices the current trade.
+	// reversion speed is a strindow, which only prices the current trade.
 	halfLifeWindow = 7 * 24 * time.Hour
 
 	// OU mean-reversion filter. A currency only gets a recommendation if it
 	// actually reverts to its mean (half-life within these bounds). Half-life
 	// outside this band means it either whipsaws (too fast) or trends (too
 	// slow to capture in a few days).
-	minHalfLife = 1 * time.Hour
-	maxHalfLife = 48 * time.Hour
-
-	// bulkOrderSize is the order size (current hourly quantity) that earns the
-	// bulk premium.
-	bulkOrderSize = 500
-
-	// sigmaOverMuMax is a loosened sanity guard on the coefficient of
-	// variation. It is deliberately wide: the half-life filter is the real
-	// discriminator for tradability, not this ratio.
+	minHalfLife    = 1 * time.Hour
+	maxHalfLife    = 48 * time.Hour
+	bulkOrderSize  = 500
 	sigmaOverMuMax = 0.8
 )
 
@@ -49,11 +41,8 @@ type recommendation struct {
 	HalfLife   time.Duration
 }
 
-// analyze computes buy/sell targets for every currency using volume-weighted
-// stats and the Volume-Weighted Momentum Skew (VMS), then drops currencies
-// that do not mean-revert (OU half-life outside [minHalfLife, maxHalfLife]).
+// analyze computes buy/sell targets
 func analyze(db *sql.DB, now time.Time) ([]recommendation, error) {
-	// Cold-start guard: we need at least minHistory of accumulated snapshots.
 	var minTs sql.NullTime
 	if err := db.QueryRow(`SELECT MIN(ts) FROM price_snapshots`).Scan(&minTs); err != nil {
 		return nil, err
@@ -63,7 +52,6 @@ func analyze(db *sql.DB, now time.Time) ([]recommendation, error) {
 	}
 
 	// The window lengths are the single source of truth here; they are injected
-	// into the SQL instead of being duplicated as string literals.
 	longH := int(longWindow / time.Hour)
 	shortH := int(shortWindow / time.Hour)
 
@@ -146,8 +134,6 @@ ORDER BY name`, longH, shortH, bulkOrderSize, sigmaOverMuMax)
 		return nil, err
 	}
 
-	// Mean-reversion filter: drop currencies whose price series does not revert
-	// to its mean within a useful holding window (OU half-life).
 	series, err := loadSeries(db, now.Add(-halfLifeWindow))
 	if err != nil {
 		return nil, err
@@ -169,7 +155,7 @@ ORDER BY name`, longH, shortH, bulkOrderSize, sigmaOverMuMax)
 }
 
 // loadSeries returns, per currency, the ordered hourly price series over the
-// given window (ordered oldest to newest).
+// given window
 func loadSeries(db *sql.DB, since time.Time) (map[string][]float64, error) {
 	rows, err := db.Query(`SELECT name, price FROM price_snapshots WHERE ts >= ? ORDER BY name, ts`, since)
 	if err != nil {
@@ -189,16 +175,12 @@ func loadSeries(db *sql.DB, since time.Time) (map[string][]float64, error) {
 	return series, rows.Err()
 }
 
-// ouHalfLife estimates the mean-reversion half-life of a price series via the
-// AR(1)-style regression ΔP_t = α + γ·P_{t-1} + ε. θ = -γ is the reversion
-// speed, so the half-life is ln(2)/θ. Returns ok=false when the series does
-// not mean-revert (γ ≥ 0) or there is too little data to fit.
+// ouHalfLife estimates the mean-reversion half-life of a price series
 func ouHalfLife(prices []float64, interval time.Duration) (time.Duration, bool) {
 	n := len(prices)
 	if n < 4 {
 		return 0, false
 	}
-	// OLS slope of ΔP on lagged P: γ = Cov(P_{t-1}, ΔP) / Var(P_{t-1}).
 	var sx, sy, sxx, sxy float64
 	for i := 1; i < n; i++ {
 		x := prices[i-1]
@@ -226,7 +208,7 @@ func ouHalfLife(prices []float64, interval time.Duration) (time.Duration, bool) 
 	if theta <= 0 || math.IsInf(theta, 0) {
 		return 0, false
 	}
-	hl := math.Ln2 / theta // in steps of `interval`
+	hl := math.Ln2 / theta
 	if math.IsInf(hl, 0) || hl < 0 {
 		return 0, false
 	}
