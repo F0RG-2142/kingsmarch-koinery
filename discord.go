@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"io"
@@ -48,23 +49,25 @@ type discordPayload struct {
 	AvatarURL string         `json:"avatar_url,omitempty"`
 }
 
-// analyzeAndSend runs the analysis once, generates a PNG, and posts it to Discord.
-func analyzeAndSend(db *sql.DB, webhookURL string) {
+// analyzeAndSend runs the analysis once, generates a PNG, and posts it to
+// every configured Discord webhook.
+func analyzeAndSend(db *sql.DB, webhookURLs []string) {
 	recs, err := analyze(db, time.Now())
 	if err != nil {
 		log.Printf("analysis: %v", err)
 		return
 	}
-	if err := sendAnalysisDiscord(webhookURL, recs, time.Now()); err != nil {
+	if err := sendAnalysisDiscord(webhookURLs, recs, time.Now()); err != nil {
 		log.Printf("send discord: %v", err)
 		return
 	}
 	log.Printf("sent analysis to discord (%d pairs)", len(recs))
 }
 
-// sendAnalysisDiscord renders the table to a PNG, POSTs it as a multipart
-// attachment to the webhook, then cleans up the temp file.
-func sendAnalysisDiscord(webhookURL string, recs []recommendation, now time.Time) error {
+// sendAnalysisDiscord renders the table to a PNG once, then POSTs it as a
+// multipart attachment to every webhook URL. Each URL is attempted
+// independently: a failure on one does not stop the others.
+func sendAnalysisDiscord(webhookURLs []string, recs []recommendation, now time.Time) error {
 	// Convert to render.Recommendation.
 	rRecs := make([]render.Recommendation, len(recs))
 	for i, r := range recs {
@@ -93,7 +96,15 @@ func sendAnalysisDiscord(webhookURL string, recs []recommendation, now time.Time
 	}
 	tmp.Close()
 
-	return sendMultipart(webhookURL, tmp.Name(), recs, now)
+	// POST the same PNG to every webhook; collect per-URL errors so a
+	// single bad URL is reported without blocking the others.
+	var errs []error
+	for _, url := range webhookURLs {
+		if err := sendMultipart(url, tmp.Name(), recs, now); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", url, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // sendMultipart POSTs the PNG file along with a small embed summary.

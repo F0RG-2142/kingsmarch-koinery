@@ -297,7 +297,7 @@ func TestSendMultipart(t *testing.T) {
 	recs := []recommendation{
 		{Name: "divine", Display: "Divine Orb", Current: 423.15, BuyTarget: 376.47, SellTarget: 422.94, BulkSell: 422.94},
 	}
-	if err := sendAnalysisDiscord(srv.URL, recs, time.Now()); err != nil {
+	if err := sendAnalysisDiscord([]string{srv.URL}, recs, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(received), "payload_json") {
