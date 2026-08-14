@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/duckdb/duckdb-go/v2"
@@ -92,18 +93,18 @@ func main() {
 	}
 
 	// Store hourly forever, analyze every 4h.
-	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
+	webhookURLs := splitWebhookURLs(os.Getenv("DISCORD_WEBHOOK_URL"))
 
 	if *sendMode {
-		if webhookURL == "" {
+		if len(webhookURLs) == 0 {
 			log.Fatal("DISCORD_WEBHOOK_URL is required for -send")
 		}
-		analyzeAndSend(db, webhookURL)
+		analyzeAndSend(db, webhookURLs)
 		return
 	}
 
 	if *testSendMode {
-		if webhookURL == "" {
+		if len(webhookURLs) == 0 {
 			log.Fatal("DISCORD_WEBHOOK_URL is required for -send-test")
 		}
 		sample := []recommendation{
@@ -112,7 +113,7 @@ func main() {
 			{Name: "chaos", Display: "Chaos Orb", Current: 44.50, BuyTarget: 40.00, SellTarget: 48.00, BulkSell: 48.00},
 			{Name: "mirror", Display: "Mirror of Kalandra", Current: 1767897.60, BuyTarget: 1600000.00, SellTarget: 1800000.00, BulkSell: 1800000.00},
 		}
-		if err := sendAnalysisDiscord(webhookURL, sample, time.Now()); err != nil {
+		if err := sendAnalysisDiscord(webhookURLs, sample, time.Now()); err != nil {
 			log.Fatal(err)
 		}
 		log.Println("sent sample PNG to discord")
@@ -120,20 +121,33 @@ func main() {
 	}
 
 	go storeHourly(db, client, league)
-	analyzeEvery(db, webhookURL)
+	analyzeEvery(db, webhookURLs)
+}
+
+// splitWebhookURLs parses a comma-separated DISCORD_WEBHOOK_URL value into
+// individual URLs, trimming whitespace and dropping empty entries.
+func splitWebhookURLs(raw string) []string {
+	parts := strings.Split(raw, ",")
+	urls := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if u := strings.TrimSpace(p); u != "" {
+			urls = append(urls, u)
+		}
+	}
+	return urls
 }
 
 // analyzeEvery runs the analysis and sends to Discord on a 4-hour cycle.
 // If no webhook URL is set there is nothing to send, so it just blocks.
-func analyzeEvery(db *sql.DB, webhookURL string) {
-	if webhookURL == "" {
+func analyzeEvery(db *sql.DB, webhookURLs []string) {
+	if len(webhookURLs) == 0 {
 		log.Println("no DISCORD_WEBHOOK_URL set; scheduled analysis disabled")
 		select {}
 	}
 	ticker := time.NewTicker(analyzeInterval)
 	defer ticker.Stop()
 	for {
-		analyzeAndSend(db, webhookURL)
+		analyzeAndSend(db, webhookURLs)
 		<-ticker.C
 	}
 }

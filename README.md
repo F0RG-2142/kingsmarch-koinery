@@ -249,7 +249,7 @@ go run .
 **Config (`.env`):**
 - `LEAGUE` — league slug (default `runes`)
 - `DUCKDB_PATH` — persistent DB file (default `./data/prices.duckdb`)
-- `DISCORD_WEBHOOK_URL` — webhook for alerts (required for `-send`/`-send-test`/scheduled alerts)
+- `DISCORD_WEBHOOK_URL` — webhook for alerts (required for `-send`/`-send-test`/scheduled alerts). Accepts **comma-separated** URLs to fan the same PNG out to multiple channels (e.g. `https://discord.com/.../A,https://discord.com/.../B`); each is posted independently.
 
 **Cold start:** analysis needs ~48h of accumulated hourly snapshots before it produces real buy/sell targets. Until then `-analyze`/`-send` report `not enough history yet (<48h)`. Use `-send-test` to verify Discord connectivity immediately.
 
